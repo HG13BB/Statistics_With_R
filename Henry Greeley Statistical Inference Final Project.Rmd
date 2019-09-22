@@ -1,0 +1,126 @@
+---
+title: "Statistical inference with the GSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `gss`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+* * *
+
+## Part 1: Data
+
+The GSS utilizes the probability proportional to size (pps) random sampling technique. Because a valid random sampling technique is used, the results of the survey can be generalized to the population as a whole and causal conclusions can be drawn from survey results. US census data is used to define primary sampling units (PSUs), which include a variety of divisions of geographic areas and sample collection techniques to ensure inclusion of a representative sample based on various demographic characteristics and geographic locations in the US population.
+
+* * *
+
+## Part 2: Research question
+
+For my research question, I would like to determine whether the general public's attitude about whether the government should help pay for medical care has changed between 1990 and 2012. I think this is an interesting question to look at in the current political climate. The early 90s saw a major push to reform healthcare at the federal level lead by Hilary Clinton when Bill Clinton was president, which ultimately failed. It would be interesting to see how attitudes about this issue compare between these two points in time, given that the ACA was signed into law during the Obama administration in 2010. Comparing 2012 to 1990 should provide a perspective on the impact that the debate over the affordable care act may have had on public opinion on this topic.
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+First I will extract fields needed to address this question.
+```{r}
+ghc <- gss %>%
+  select(caseid,year, helpsick)
+```
+Remove na records and select years.
+```{r}
+ghcna <- subset(ghc, !is.na(helpsick))
+ghcna9016 = subset(ghcna, year == 1990 | year == 2012)
+```
+
+Simplify the answers to isolate those who say people help self and categorize this as a no (e.g. government should not help pay for medical care).
+```{r}
+ghcna9016$helpsickYN <- "Y"
+ghcna9016$helpsickYN[ghcna9016$helpsick == "People Help Selves"] <- "N"
+```
+
+Summarize the data in table gouped by year, answer:
+```{r}
+ghcna9016summ <- ghcna9016 %>%
+  group_by(year, helpsickYN) %>%
+  summarise(count = n())
+ghcna9016summ
+
+```
+
+Add percentage:
+```{r}
+ghcna9016summperc <- ghcna9016summ %>% group_by(year) %>%
+  mutate(percent=paste0(round(count/sum(count)*100,2),"%"))
+  ghcna9016summperc
+```
+
+```{r}
+colnames(ghcna9016summperc)[3] <- "resp_count"
+```
+
+Graph in stacked bar chart:
+```{r}
+ghcna9016summplot <- ggplot() + geom_bar(aes(x=year, y= resp_count ,fill=helpsickYN),data = ghcna9016summperc , stat="identity") +
+
+geom_label(aes(x=year, y= resp_count ,fill=helpsickYN, label = percent), data = ghcna9016summperc,position = position_stack(vjust = 0.5))
+
+ghcna9016summplot
+```
+
+
+Initial observation: The percentage of respondents who believe government should not help ("people help selves") has increased from about 7% in 1990 to about 13% in 2012. This seems significant.
+
+* * *
+
+## Part 4: Inference
+
+Null Hypothesis: Percentage of the population that believe government should not help pay for healthcare has not changed between 1990 and 2012.
+
+Alternative Hypothese: Percentage of population that believe government should not help pay for healthcare is different (greater or less) in 2012 than it was in 1990.
+
+Inference Method: Difference of two proportions
+
+Check Conditions:
+
+Each proportion follows a normal model and samples are independent of each other: 
+Yes - sample observations are independent (use random sampling techniques) and we expect at least 10 successes and 10 failures in each sample. Therefore, the samples follow a normal model.  Also, the samples are independent of each other as they were taken at different points in time using random sampling techniques.
+
+Perform inference using inference function:
+```{r}
+inference(y = helpsickYN,x = as.factor(year), data = ghcna9016, statistic = "proportion", type = "ht", method = "theoretical", success = "N",alternative = "twosided")
+```
+
+Calculate z score for a two sided 99% confidence interval:
+```{r}
+qnorm(.005)
+```
+
+
+Conclusion: The recorded z-score is well beyond the two sided score for a 99% confidence interval. Therefore, we should reject the null hypothesis that the percentage of people who believe the government should not help pay for medical care has not changed between 1990 and 2012 based on GSS survey results.
+
+Additional thoughts: The results suggest that the public's views have become more unfavorable to government intervention to help pay for healthcare costs. Some additional examination of answers within different demographic groups could provide interesting information to see which groups may be driving this trend (e.g. male/female, age, race etc.). 
+
+

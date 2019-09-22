@@ -1,0 +1,340 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(GGally)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `movies`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("movies.Rdata")
+
+```
+
+
+* * *
+
+## Part 1: Data
+
+This data is comprised of 651 randomly sampled movies that were produced and released before 2016. Because random sampling was used, results are generalizable to all movies. However, causal conclusions cannot be drawn as random assignment was not used in sampling.
+
+* * *
+
+## Part 2: Research question
+For my research question, I would like to determine what subset of the following variables provides the most accurate prediction of the Rotten Tomatoes audience score for feature films. I am focusing on feature films because many of the film awards (best actor, best director etc.) may not apply to made for TV and documentary films. This question is of interest to me because, as a user of Rotten Tomatoes, I have always placed the most weight on audience score when deciding which movies I would like to see. It will be interesting to see if there are other key predictors of audience score.
+
+As a result, my initial model will include the following. 
+
+Response Variable: audience_score
+
+Potential explanatory variables: 
+imdb_rating ,critics_score ,best_pic_win ,best_actor_win ,best_actress_win
+ ,best_dir_win ,top200_box
+
+In addition to the modeling question above, I would like to use the exploratory data analysis portion of the assignment to look at the following question:
+
+How do average audience scores and average critics scores compare across different film genres? Are there certain genres where average audience score varies more or less from the critics score? I am interested in doing some preliminary analysis to compare audience and critics scores across genres as I have often seen significant differences between these scores for films I have enjoyed.
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+Select variables exploratory analysis and modeling.
+```{r}
+modeldata <- select(movies, thtr_rel_year, title, title_type, genre, imdb_rating, critics_score, audience_score, best_pic_nom, best_pic_win, best_actor_win, best_actress_win, best_dir_win, top200_box)
+
+```
+
+What portion of the population is feature films? I will want to focus my analysis on this population as the variables are most applicable to feature films.
+```{r}
+mdsummary <- modeldata %>% 
+  group_by(title_type) %>%
+  summarise(count = n())
+
+mdsummary
+```
+The majority are feature films. 
+
+I will eliminate non-feature films from further analysis.
+
+```{r}
+modeldata <- filter(modeldata, title_type == "Feature Film" )
+
+```
+
+##Research Question analysis
+
+Create a dataframe with only the variables I would like to compare across genres.
+```{r}
+mdgenre <- select(modeldata, genre, critics_score, audience_score)
+```
+
+Calculate avg. for each selected variable.
+```{r}
+mdgenresum <- mdgenre  %>% 
+  group_by(genre) %>%
+  summarise_all(funs(mean))
+
+
+mdgenresum
+```
+
+After looking at the table, I think it would be interesting to plot audience score and critic score averages across genre.
+
+Pivot the data for graphing.
+```{r}
+library(reshape2) #to pivot data on genre
+```
+
+```{r}
+mdgenresumlong <- melt(mdgenresum, id.vars = "genre")
+
+mdgenresumlong
+```
+
+Plot results.
+```{r}
+ggplot(mdgenresumlong,aes(x=genre,y=value,fill=variable))+
+  geom_bar(stat="identity",position="dodge") +
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+```
+
+
+Observations: After plotting this data, what I find most interesting is that it looks like average audience score is higher in every genre with the biggest difference in documentary. As a result, based on the plot, the difference between the avg. audience score does appear to be different in different genres. Further statistical analysis is needed to determine if any of these differences are statistically significant. It appears that differences in some categories may be statistically significant.
+
+* * *
+
+## Part 4: Modeling
+
+##Data Preparation
+I am going to change all categorical variables into numerical variables to add some flexibility for creating additional variables if needed.
+```{r}
+modeldata$best_pic_nomf <- ifelse(modeldata$best_pic_nom == "yes", 1, 0)
+modeldata$best_pic_winf <- ifelse(modeldata$best_pic_win == "yes", 1, 0)
+modeldata$best_actor_winf <- ifelse(modeldata$best_actor_win == "yes", 1, 0)
+modeldata$best_actress_winf <- ifelse(modeldata$best_actress_win == "yes", 1, 0)
+modeldata$best_dir_winf <- ifelse(modeldata$best_dir_win == "yes", 1, 0)
+modeldata$top200_boxf <- ifelse(modeldata$top200_box == "yes", 1, 0)
+```
+
+The variables that I will include in my full model are the following:
+imdb_rating, critics_Score, best_pic_winf, best_actor_winf, best_actress_winf, best_dir_winf, top200_boxf
+
+Based on my assessment of the available data for each movie, these seemed like the elements that would most likely correspond to the audience's rating of the movie. The additional variables such as dates of release and dvd release did not seem relevant to audience_score.  Information about actors was exluded as it would likely have too many levels. URL data was excluded as this is not relevant to ratings of the movies.
+
+For the modeling portion of the assignment, I will use backwards elimination. I have chosen this approach because it will allow me to review all variables as a starting point. 
+
+Full model:
+```{r}
+lmaudscore1 <- lm(audience_score ~ imdb_rating + critics_score + best_pic_winf + best_actor_winf + best_actress_winf + best_dir_winf + top200_boxf, data = modeldata )
+
+summary(lmaudscore1)$adj.r.squared
+```
+
+Version 2: Eliminate best_pic_winf
+```{r}
+lmaudscore2 <- lm(audience_score ~ imdb_rating + critics_score + best_actor_winf + best_actress_winf + best_dir_winf + top200_boxf, data = modeldata )
+
+summary(lmaudscore2)$adj.r.squared
+```
+
+Version 3: Eliminate top200_boxf
+```{r}
+lmaudscore3 <- lm(audience_score ~ imdb_rating + critics_score + best_pic_winf + best_actor_winf + best_actress_winf + best_dir_winf , data = modeldata )
+
+summary(lmaudscore3)$adj.r.squared
+```
+
+Version 4: Eliminate best_dir_winf
+```{r}
+lmaudscore4 <- lm(audience_score ~ imdb_rating + critics_score + best_pic_winf + best_actor_winf + best_actress_winf +  top200_boxf, data = modeldata )
+
+summary(lmaudscore4)$adj.r.squared
+```
+
+Version 5: Eliminate best_actress_winf
+```{r}
+lmaudscore5 <- lm(audience_score ~ imdb_rating + critics_score + best_pic_winf + best_actor_winf + best_dir_winf + top200_boxf, data = modeldata )
+summary(lmaudscore5)$adj.r.squared
+```
+
+Version 6: Eliminate best_actor_winf
+```{r}
+lmaudscore5 <- lm(audience_score ~ imdb_rating + critics_score + best_pic_winf + best_actress_winf + best_dir_winf + top200_boxf, data = modeldata )
+
+summary(lmaudscore5)$adj.r.squared
+```
+
+
+
+Version 4.1: Eliminate critics_score
+```{r}
+lmaudscore4.1 <- lm(audience_score ~ imdb_rating + best_actor_winf + best_actress_winf, data = modeldata )
+
+summary(lmaudscore4.1)
+```
+Adjusted R squared is reduced from .7256 to .7212. 
+
+Version 4.2: We will eliminate imdb_rating next.
+```{r}
+lmaudscore4.2 <- lm(audience_score ~ critics_score + best_actor_winf + best_actress_winf, data = modeldata )
+
+summary(lmaudscore4.2)
+```
+Adjusted R squared is reduced from .7256 to .4523. 
+
+Version 4.3: We will eliminate best_actor_winf next.
+```{r}
+lmaudscore4.3 <- lm(audience_score ~ imdb_rating + critics_score + best_actress_winf, data = modeldata )
+
+summary(lmaudscore4.3)
+```
+Adjusted R squared is reduced from .7256 to .7249. 
+
+Version 4.4: We will eliminate best_actress_winf next.
+```{r}
+lmaudscore4.4 <- lm(audience_score ~ imdb_rating + critics_score + best_actor_winf, data = modeldata )
+
+summary(lmaudscore4.4)
+```
+Adjusted R squared is reduced from .7256 to .7251. Therefore, no additional variables will need to be removed from the model.
+
+The most effective model, lmaudscore4, as 4 variables. 
+```{r}
+summary(lmaudscore4)
+```
+
+Model Diagnostics:
+
+1. Normal Residuals:
+```{r}
+lmaudscore4res <- rstandard(lmaudscore4)
+
+qqnorm(lmaudscore4res)
+qqline(lmaudscore4res)
+```
+Result: Residuals appear to be nearly normal as they largely follow the line.
+
+2. Variability of residuals is nearly constant. Plot absolute value of residuals.
+```{r}
+ggplot(data = lmaudscore4, aes(x = .fitted, y = abs(.resid))) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+Variability of residuals appears to be left skewed.
+
+
+3. Residuals are independent. Analyze residuals over time.
+```{r}
+ggplot(data = lmaudscore4, aes(x = modeldata$thtr_rel_year, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+Residuals appear to be independent with no major apparent trends over time.
+
+4. Each variable is linearly related to outcome. Plot residuals against each variable.
+
+imdb_rating & residuals
+```{r}
+ggplot(data = lmaudscore4, aes(x = modeldata$imdb_rating, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+Significant left skew and clustering is noted with the relationship between residuals and imdb_rating.
+
+critics_score & residuals
+```{r}
+ggplot(data = lmaudscore4, aes(x = modeldata$critics_score, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+The results for critics_score show less skew, but variance appears to decrease as fitted value increases.
+
+best_actor_win & residuals
+Note: For ease of plotting, I am using the categorical version of the variable hear, but results should be the same with the factor or categorical.
+```{r}
+ggplot(data = lmaudscore4, aes(x = modeldata$best_actor_win, y = .resid)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+We see less variability in the yes group (e.g. best_actor_win).
+
+best_actress_win & residuals
+Note: For ease of plotting, I am using the categorical version of the variable hear, but results should be the same with the factor or categorical.
+```{r}
+ggplot(data = lmaudscore4, aes(x = modeldata$best_actress_win, y = .resid)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+Similar to best actor, We see less variability in the yes group (e.g. best_actress_win).
+
+Diagnostics Observations: THe diagnostics indicate that there may be some issues with the model. Specifically, the variability of residuals does not appear to be constant and individual variables do not show complete random scatter in their relationship to residuals. This suggests the model may not be fully reliable. For the purpose of this assignment, I will continue with this model as I do not have the knowledge remedy these issues right now.   
+
+Interpretation: The model indicates that, if all other variables are held constant, the expected audience score will increase by 14.6 points for each 1 point increase in the imdb_rating, increase .07 points per 1 point increase in the critics score, and will decrease by 1.89 points if the film has a best actor award winner, and decrease by 1.88 points if the film has a best actress award winner. the negative intercept to does have practical meaning. 
+
+The adjusted R2 score indicates that the model explains roughly 72.6% of the variation in the target variable, audience_score.
+
+* * *
+
+## Part 5: Prediction
+
+For my prediction exercise, I will predict audience score for the film arrival.
+
+Create input data:
+```{r}
+arrival <- data.frame(imdb_rating = 7.8, critics_score = 94, best_actor_winf = 0, best_actress_winf = 0)
+
+```
+
+Perform prediction:
+```{r}
+predict(lmaudscore4, arrival, interval = "prediction", level = 0.95)
+```
+Result: THe model predicted a score of 84.55. The actual audience score appears to be 82(%) based on the films RT page.
+(https://www.rottentomatoes.com/m/arrival_2016)
+
+The model predicts an audience score of 84 with 95% confidence that the actual score falls between 64 and 105 (not a possible score). The model appeared to perform fairly well in this case as the predicted score was within about 4% (3/82) of actual score.
+
+I will try 1 additional prediction for fun with the film Lincoln from 2012.
+```{r}
+lincoln <- data.frame(imdb_rating = 7.4, critics_score = 89, best_actor_winf = 1, best_actress_winf = 0)
+
+predict(lmaudscore4, lincoln, interval = "prediction", level = 0.95)
+```
+The model predicts an audience score of 76.4 with 95% confidence that the actual score falls between 55.8 and 96.96. In this case the model predicts a score which is within 4.5% (3.6/80) of the actual RT audience score of 80 as seen here (https://www.rottentomatoes.com/m/lincoln_2011).
+
+* * *
+
+## Part 6: Conclusion
+WHile the model appears to have some shortcomings based on the outcomes in diagnostics, it appeared to perform well in prediction (though this is my first time interpreting multiple linear regression). It seems like some additional work might be necessary to deal with some of the issues identified in diagnostics. Due to my inexperience with linear modeling, I am not sure exactly how to interpret results except to say that they seem fairly close to the actual results in the prediction cases that I executed. 

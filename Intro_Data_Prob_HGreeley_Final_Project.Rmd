@@ -1,0 +1,400 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+### Load data
+
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+* * *
+
+## Part 1: Data
+
+Data Collection Methods: 
+
+The survey is administered via telephone and the sampling unit is a telephone number. The survey uses stratified random sampling to collect data. Different stratification techniques are used for landlines and cellular telephone numbers.In addition, most (49) states stratify the population by sub-state region and sample disproportionatey from strata that correspond to certain sub-regions of interest to ensure adequate sample representation of populations of interest to the state. 
+
+Scope of Inference: 
+
+The disproportionate representation of people from certain geographically defined sub-regions in most states seems like it would bias the sample and therefore mean that the results cannot be generalized to the population as a whole.
+
+* * *
+
+## Part 2: Research questions
+
+**Research quesion 1:**
+Are people who report consuming sugary drinks on a daily basis more likely to report being diagnosed with diabetes than people who report consuming sugary drinks less frequently or not at all?
+
+This question is of interest to me because consumption of sugary drinks has been discussed in the media as a significant public health issue that is affecting the the US population and it would interesting to see if the results of this survey show a connection between frequency of sugary drink consumption and reported diagnoses of diabetes.
+
+**Research quesion 2:**
+Is there a correlation between alcohol consumption (avg. drinks per day) and reported poor mental health? Does this correlation differ between genders?
+
+I find this question interesting because I have heard about links between alcohol consumption and depression and am interested to see if this data supports a positive correlation between regular alcohol consumption and reported feelings of poor mental health.
+
+**Research quesion 3:**
+What percentage of people who consume more than 2 drinks per day on average have been told that they have high blook pressure by a health professional?
+
+This builds on my earlier analysis in that I can use some of the same variables I have created and there would appear to be a more concrete link between the amount that someone drinks and the likelihood that they would have been told they have high blood pressure. 
+* * *
+
+## Part 3: Exploratory data analysis
+
+```{r}
+names("brfss2013.RData")
+```
+
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button (green button with orange arrow) above. Make sure that your code is visible
+in the project you submit. Delete this note when before you submit your work.
+
+**Research quesion 1:**
+Are people who report consuming sugary drinks on a daily basis more likely to report being diagnosed with diabetes than people who report consuming sugary drinks less frequently or not at all?
+
+I will start by doing some initial exploration of the reported responses related to sugary drink consumption.I am creating a new object that only has the information related to sugary drinks question and the diabetes question. I am going to view this information using the View function from the console.
+
+```{r}
+sugardiab <- brfss2013 %>% 
+  group_by(ssbsugar,diabete3) %>%
+  summarise(count = n())
+```
+
+I am going to filter out any reponses that did not answer both the diabetes diagnosis and sugary drink questions, so that I will only be working with responses that addressed both questions.
+
+```{r}
+sugardiab <- subset(sugardiab, !is.na(ssbsugar))
+```
+
+```{r}
+sugardiab <- subset(sugardiab, !is.na(diabete3))
+```
+
+I am creating a histogram to look at the different daily, weekly, monthly answers in in the data.
+
+```{r}
+ggplot(data = sugardiab, aes(sugardiab$ssbsugar)) +
+  geom_histogram()
+```
+
+Now that I have done some initial exploration, I have decided to refine the goals of my analysis a little bit. I have going to group the population of respondents to the sugary drink question into 4 groups: No sugary drinks, 1 or more sugary drinks per day, 1 or more sugary drinks per week, 1 or more sugary drinks per month. For each of those groups, I will compute a variable to categorizes answers into three possible groups: yes/pre_-Diabetes and No.
+
+To accomplish the above, I will need to create new variables from my dataset. 1st, I will create a variable that groups responses to the sugary drinks question into the three groups I describe above.
+
+First I am creating a new variable that summarizes reported sugary drink consumption as daily, weekly or Monthly.
+```{r}
+sugardiab$sugdrfreq <- "NA"  
+sugardiab$sugdrfreq[sugardiab$ssbsugar>100 & sugardiab$ssbsugar<200] <- "Daily"
+sugardiab$sugdrfreq[sugardiab$ssbsugar>200 & sugardiab$ssbsugar<300] <- "Weekly"
+sugardiab$sugdrfreq[sugardiab$ssbsugar>300 & sugardiab$ssbsugar<400] <- "Monthly"
+sugardiab$sugdrfreq[sugardiab$ssbsugar == 0] <- "Never"
+
+```
+
+Next, I am creating a variable that summarizes answer choices as no or yes/pre-diabetes to shrink the answers to two categories.
+
+```{r}
+sugardiab$diabyn <- "NA"  
+sugardiab$diabyn[sugardiab$diabete3 == "Yes"] <- "Yes/Pre-Diabetes"
+sugardiab$diabyn[sugardiab$diabete3 == "No, pre-diabetes or borderline diabetes"] <- "Yes/Pre-Diabetes"
+sugardiab$diabyn[sugardiab$diabete3 == "Yes, but female told only during pregnancy"] <- "No"
+sugardiab$diabyn[sugardiab$diabete3 == "No"] <- "No"
+```
+
+Now I will summarize and plot this data to assess the difference in reported diabetes across the groupings that I have defined.
+
+First: Summarize in a table.
+```{r}
+sugardiabsummary <- sugardiab %>% 
+  group_by(sugdrfreq,diabyn) %>%
+  summarise(sum(count))
+```
+
+rename int he sum(count) variable
+```{r}
+colnames(sugardiabsummary)[3] <- "response_count"
+```
+
+Calculate percentages for each sub group (Daily, Weekly, Monthly, Never).
+
+```{r}
+sugdiabsumpercent <- sugardiabsummary %>% group_by(sugdrfreq) %>%
+  mutate(percent=paste0(round(response_count/sum(response_count)*100,2),"%"))
+  sugdiabsumpercent
+```
+
+Finally, I am going to plot this data in a bar chart and present the table.
+
+Stacked Bar Chart:
+```{r}
+sugdiabsumperplot <- ggplot() + geom_bar(aes(x=sugdrfreq, y=response_count ,fill=diabyn),data = sugdiabsumpercent , stat="identity") +
+
+geom_label(aes(x=sugdrfreq, y=response_count ,fill=diabyn, label = percent), data = sugdiabsumpercent,position = position_stack(vjust = 0.5))
+
+sugdiabsumperplot
+  
+
+```
+
+
+Table:
+```{r}
+sugdiabsumpercent
+```
+
+Conclusion: Based on the results of this analysis, approximately 9.6% of respondents who reported some level of daily sugary drink consumption also reported a diabetes or pre-diabetes diagnosis whereas the rate of reported diabetes diagnosis for respondents reporting weekly and monthly sugary drink consumption were 10.6% and 11.3% respectively. In addition, the the highest rate of reported diabetes diagnosis among the 4 groups was with respondents who reported that they never consume sugary drinks. Therefore, the results to do not indicate that those who report daily sugary drink consumption are more likely to have a reported diabetes diagnosis than less frequent reported consumers of sugary drinks, or people who do not consume sugary drinks.
+
+**Research quesion 2:**
+Is there a correlation between alcohol consumption and depression? Does the level of correlation between the two variables differ between men and women?
+
+
+I will start by creating a new dataframe with the variables I think will be relevant to this analysis.
+```{r}
+sexalcohol <- brfss2013 %>%
+  select(menthlth,alcday5,sex,avedrnk2)
+```
+
+Remove rows where menthlth is answered with an NA.
+```{r}
+sexalcohol <- subset(sexalcohol, !is.na(sexalcohol$menthlth))
+```
+
+Replace NA with 0 in the elements where I will perform calculations. 
+```{r}
+sexalcohol$avedrnk2[is.na(sexalcohol$avedrnk2)] <- 0
+sexalcohol$alcday5[is.na(sexalcohol$alcday5)] <- 0 
+```
+
+Investigate and remove additional null values
+```{r}
+#Records with an NA in any column
+sexalcoholna <- subset(sexalcohol, rowSums(is.na(sexalcohol))>0)
+#Records with no NAs
+sexalcoholnona <- subset(sexalcohol, rowSums(is.na(sexalcohol))==0)
+```
+
+Examine remaining NA records
+```{r}
+sexalcoholna
+```
+These records report NA for sex and are therefore unusable. Remaining analysis will be performed on sexalcoholnona.
+
+To calculate drinks per day, I am going to create calculated field which uses the number of days when drinks were consumed (alcday5) and the field I just computed above (drinksday). 
+```{r}
+# Add column with metric for drinks per day
+sexalcoholnona <- mutate(sexalcoholnona, drinkday = ifelse(alcday5 > 100 & alcday5 < 200, ((alcday5 - 100)/7)*avedrnk2,ifelse(alcday5>200 & alcday5<300,((alcday5 - 200)/30)*avedrnk2, 0)))
+```
+
+Separate male and female
+```{r}
+sexalcoholnonaf = subset(sexalcoholnona, sex == "Female")
+sexalcoholnonam = subset(sexalcoholnona, sex == "Male")
+```
+
+Plot regression between depression days and avg. drinks per day.
+```{r}
+#Plot for females
+ggplot(sexalcoholnonaf, aes(x = drinkday, y = menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+After creating the plot, I see extreme values for drinks per day. I am going to remove these values as they could be inaccurate and/or too extreme to be meaningful for this analysis. I found 617 cases of respondents reporting >10 drinks per day. I will remove these from my analysis.
+```{r}
+#Review records reporting > 10 drinks per day to make sure calculations appear correct
+sexalcoholnonaweird = subset(sexalcoholnona, drinkday > 10)
+```
+
+I will exclude respondents who report more than 7 drinks per day. This is still a large number indicative of a serious drinking problem, but still seems somewhat plausible.
+```{r}
+sexalcoholnonaclean = subset(sexalcoholnona, drinkday <= 7)
+sexalcoholnonaf = subset(sexalcoholnonaclean, sex == "Female")
+sexalcoholnonam = subset(sexalcoholnonaclean, sex == "Male")
+
+```
+
+I will replot the data.
+
+
+Female:
+```{r}
+ggplot(sexalcoholnonaf, aes(x = drinkday, y = menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+
+
+Male:
+```{r}
+ggplot(sexalcoholnonam, aes(x = drinkday, y = menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+
+
+All:
+```{r}
+ggplot(sexalcoholnonaclean, aes(x = drinkday, y = menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+Now I am going to normalize the varables and replot
+
+Female:
+```{r}
+#Create new dataframe with only the colums I am analyzing and scale the variables
+sexalccleanscalefem <- data.frame(sexalcoholnonaf$menthlth, sexalcoholnonaf$drinkday)
+sexalccleanscalefem <- data.frame(scale(sexalccleanscalefem))
+```
+Male:
+```{r}
+#Create new dataframe with only the colums I am analyzing and scale the variables
+sexalccleanscalemal <- data.frame(sexalcoholnonam$menthlth, sexalcoholnonam$drinkday)
+sexalccleanscalemal <- data.frame(scale(sexalccleanscalemal))
+```
+
+Replot scaled variables:
+
+Female:
+```{r}
+ggplot(sexalccleanscalefem, aes(x = sexalcoholnonaf.drinkday, y = sexalcoholnonaf.menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+Male:
+```{r}
+ggplot(sexalccleanscalemal, aes(x = sexalcoholnonam.drinkday, y = sexalcoholnonam.menthlth)) + 
+  geom_point(shape=1) + geom_smooth(method=lm)
+```
+
+After plotting both male and female variables visually, the correlation between drinks per data and number of days with bad mental health seems low. 
+
+I am going to review the correlation using the cor function.
+
+Female:
+```{r}
+cor(sexalccleanscalefem)
+```
+
+Male:
+```{r}
+cor(sexalccleanscalemal)
+```
+
+Conclusion: The correlation between respondents' average number of drinks per day and their number of days Mental Health Not Good appears to be weak (r value of .0076 for females and .0125 for males). While the correlation for males is slightly higher, neither is strong.Therefore, the data does not support correlation of these two answers.
+
+**Research quesion 3:**
+
+What percentage of people who consume more than 2 drinks per day on average have been told that they have high blood pressure by a health professional? 
+
+Select relevant variables
+```{r}
+bpalcohol <- brfss2013 %>%
+  select(alcday5,sex,avedrnk2,bphigh4)
+```
+
+Convert NA to 0 for drinking amount variables
+```{r}
+bpalcohol$avedrnk2[is.na(bpalcohol$avedrnk2)] <- 0
+bpalcohol$alcday5[is.na(bpalcohol$alcday5)] <- 0 
+```
+
+Review remaining NA records
+```{r}
+#Records with an NA in any column
+bpalcoholna <- subset(bpalcohol, rowSums(is.na(bpalcohol))>0)
+#Records with no NAs
+bpalcoholnona <- subset(bpalcohol, rowSums(is.na(bpalcohol))==0)
+```
+
+```{r}
+View(bpalcoholnona)
+```
+There are no NA records.
+
+
+Calculate average drinks per day
+```{r}
+bpalcohol <- mutate(bpalcohol, drinkday = ifelse(alcday5 > 100 & alcday5 < 200, ((alcday5 - 100)/7)*avedrnk2,ifelse(alcday5>200 & alcday5<300,((alcday5 - 200)/30)*avedrnk2, 0)))
+```
+
+```{r}
+View(bpalcohol)
+```
+
+Add variable to state whether avg. drinks per day is greater than or equal to 2.
+```{r}
+bpalcohol <- mutate(bpalcohol, drinkday2 = ifelse(drinkday >= 2, ">=2" , "<2"))
+```
+
+Summarize percentage of y/n responses to blood pressure question by drinkday2 category.
+```{r}
+bpalcoholsummary <- bpalcohol %>% 
+  group_by(drinkday2,bphigh4) %>%
+  summarise(count = n())
+```
+
+```{r}
+#Remove NA from summary table
+bpalcoholsummary <- subset(bpalcoholsummary, !is.na(bphigh4))
+```
+
+Add percentage column
+```{r}
+bpalcoholsummary <- bpalcoholsummary %>% group_by(drinkday2) %>%
+  mutate(percent=paste0(round(count/sum(count)*100,2),"%"))
+```
+
+Results
+```{r}
+bpalcoholsummary
+```
+
+Plot results in stacked bar graph.
+
+First create subsets of >2 drinks per day and less than 2 drinks per day due to scaling.
+```{r}
+bpalcoholsummarymore2 <- subset(bpalcoholsummary, drinkday2 == ">=2")
+bpalcoholsummaryless2 <- subset(bpalcoholsummary, drinkday2 == "<2")
+
+```
+
+
+Note: Need to plot >= 2 and <2 separately due to scaling.
+
+#>=2 drinks per day
+Note: I had problems positioning the text in this plot and elected not to further investigate how to solve these problems due to time constraints.
+```{r}
+bpalcoholsummarymore2plot <- ggplot() + geom_bar(aes(x=drinkday2, y=count,fill=bphigh4),data = bpalcoholsummarymore2 , stat="identity") +
+  
+geom_label(aes(x=drinkday2, y=count,fill=bphigh4, label = percent),position = position_stack(vjust = 0.5), data = bpalcoholsummarymore2)
+
+bpalcoholsummarymore2plot
+```
+
+#<2 drinks per day.
+```{r}
+bpalcoholsummaryless2plot <- ggplot() + geom_bar(aes(x=drinkday2, y=count,fill=bphigh4),data = bpalcoholsummaryless2 , stat="identity") +
+
+geom_label(aes(x=drinkday2, y=count,fill=bphigh4, label = percent),position = position_stack(vjust = 0.5), data = bpalcoholsummaryless2)
+
+bpalcoholsummaryless2plot
+```
+
+Conclusion: 43.1% (42.92% + 1.45%) of respondents who reported consuming an average of more than 2 drinks per day also reported they had been told they had high or borderline blood pressure by a medical professional. In contrast, 41.4% (40.44 + 1.01%) of respondents who reported consuming less than 2 drinks per day  also reported being told they had high or borderline blook pressure readings by a medical professional. This suggests that the results of the survey may support the hypothese that excessive drinkers are more likely to be diagnosed with high blood pressure.
